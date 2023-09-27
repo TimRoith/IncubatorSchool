@@ -36,6 +36,13 @@ def test_adjoint(A, x, y=None):
     res_2 = np.sum(x * A.adjoint(y))
     return res_1, res_2
 
+class L1_norm:
+    def __call__(self, u, lamda=1.):
+        return lamda * np.linalg.norm(u.ravel(), ord=1)
+
+    def prox(self, u, lamda=1.):
+        return soft_shrinkage(u, lamda)
+
 
 
 class Grad:
