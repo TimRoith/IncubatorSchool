@@ -82,7 +82,7 @@ class split_Bregman_TV(optimizer):
     
     
 
-class ista(optimizer):
+class ista_L1(optimizer):
     def __init__(self, A, u, b, t=0.1, lamda=1.0, **kwargs):
         super().__init__(**kwargs)
         self.A = A
