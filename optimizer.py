@@ -79,6 +79,29 @@ class split_Bregman_TV(optimizer):
         return lscg(self.cg_op, rhs, self.u, 
                     verbosity = self.inner_verboisty, 
                     max_it=self.max_inner_it).solve()
+    
+    
+
+class ista(optimizer):
+    def __init__(self, A, u, b, t=0.1, lamda=1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.A = A
+        self.u = u
+        self.b = b
+        self.lamda = lamda
+        self.t = t
+    
+    def step(self,):
+        #e = np.linalg.norm(A(x)-y)**2 + lamda*np.linalg.norm(x, ord=1)
+
+        grad = self.A.adjoint(self.A(self.u) - self.b)
+        lin_up = self.u - 2 * self.t * grad
+        self.u = soft_shrinkage(lin_up, self.lamda * self.t)
+
+# def ista(y, A, A_adjoint, prox, t, lamda, iter):
+#     x = ski.transform.iradon(y*y.shape[-2])
+
+
 
 
 
