@@ -20,7 +20,7 @@ R = Radon(theta=theta)
 
 
 sinogram =  R(phantom) # ski.transform.radon(phantom, theta)
-#sinogram += np.random.normal(0, noise_lvl, size=sinogram.shape)
+sinogram += np.random.normal(0, noise_lvl, size=sinogram.shape)
 
 # def soft_shrinkage(x, lamda):
 #     return np.maximum(np.abs(x)-lamda, 0.) * np.sign(x)

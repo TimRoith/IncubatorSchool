@@ -1,4 +1,4 @@
-from optimizer import split_Bregman_TV
+from optimizers import split_Bregman_TV
 from operators import Radon, TV
 import matplotlib.pyplot as plt
 import skimage as ski
@@ -21,11 +21,12 @@ sinogram += np.random.normal(0, noise_lvl, size=sinogram.shape)
 #%%
 u0 = R.inverse(sinogram)
 
-def energy_fun(A, u, lamda=1.):
-    return 1/2 * np.linalg.norm(A(u) - sinogram)**2 + lamda * TV()(u)
+lamda = .02
+def energy_fun(u):
+    return 1/2 * np.linalg.norm(R(u) - sinogram)**2 + lamda * TV()(u)
 
 sBTV = split_Bregman_TV(R, sinogram, u0, gamma=1.0, 
-                        energy_fun=energy_fun, lamda = .02,
+                        energy_fun=energy_fun, lamda = lamda,
                         max_inner_it = 2)
 sBTV.solve()
 
