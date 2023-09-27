@@ -13,14 +13,13 @@ class Radon:
         return ski.transform.radon(u, self.theta)/u.shape[-1]
     
     def adjoint(self, k):
-        return ski.transform.iradon(k, self.theta, filter_name=None)*(k.shape[0] * np.pi/(2 * self.num_theta))
-    
-    def T(self, k):
-        return self.adjoint(k)
+        return ski.transform.iradon(k, self.theta, filter_name=None)/(k.shape[0] * np.pi/(2 * self.num_theta))
     
     def inv(self, k):
         return ski.transform.iradon(k * k.shape[0], self.theta)
     
+    inverse = inv
+    T = adjoint
 
 class TV:
     def __init__(self,):
