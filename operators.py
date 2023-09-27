@@ -19,7 +19,7 @@ class Radon:
         return self.adjoint(k)
     
     def inv(self, k):
-        return ski.transform.iradon(k * /k.shape[0], self.theta)
+        return ski.transform.iradon(k * k.shape[0], self.theta)
     
 
 class TV:
