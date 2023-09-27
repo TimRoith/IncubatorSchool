@@ -10,16 +10,16 @@ class Radon:
         self.num_theta = len(self.theta)
     
     def __call__(self, u):
-        return ski.transform.radon(u, self.theta)*(np.pi/(2 * self.num_theta))
+        return ski.transform.radon(u, self.theta)/u.shape[-1]
     
     def adjoint(self, k):
-        return ski.transform.iradon(k, self.theta, filter_name=None)
+        return ski.transform.iradon(k, self.theta, filter_name=None)*(k.shape[0] * np.pi/(2 * self.num_theta))
     
     def T(self, k):
         return self.adjoint(k)
     
     def inv(self, k):
-        return ski.transform.iradon(k, self.theta)
+        return ski.transform.iradon(k * k.shape[0], self.theta)
     
 
 class TV:

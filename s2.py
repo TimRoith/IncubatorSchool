@@ -5,18 +5,18 @@ import skimage as ski
 import numpy as np
 
 #%%
-num_theta = 100
+num_theta = 90
 dim = 100
-noise_lvl = 0.0 * dim
+noise_lvl = 0.01
 phantom = ski.img_as_float(ski.data.shepp_logan_phantom())
 phantom = ski.transform.resize(phantom, (dim, dim))
 
 
-theta = np.linspace(0,90, endpoint = False, num=num_theta)
+theta = np.linspace(0,180, endpoint = False, num=num_theta)
 R = Radon(theta=theta)
 
 sinogram =  R(phantom)
-#sinogram += np.random.normal(0, noise_lvl, size=sinogram.shape)
+sinogram += np.random.normal(0, noise_lvl, size=sinogram.shape)
 
 #%%
 u0 = ski.transform.iradon(sinogram, theta=theta)
