@@ -14,8 +14,9 @@ class optimizer:
     def solve(self):
         while not self.terminate():
             self.step()
+            self.num_it+=1
             if not self.energy_fun is None:
-                energy = self.energy_fun(self.A, self.u, lamda=self.lamda)
+                energy = self.energy_fun(self.u)
                 self.cur_energy=energy
                 self.energy_hist.append(energy)
             if self.verbosity > 0:
@@ -73,7 +74,6 @@ class split_Bregman_TV(optimizer):
         self.u = self.solve_inner(inner_rhs)
         self.d = soft_shrinkage(self.b + self.grad(self.u), self.lamda * self.gamma)
         self.b = self.b + self.grad(self.u) - self.d
-        self.num_it += 1
         
     def solve_inner(self, rhs):
         return lscg(self.cg_op, rhs, self.u, 
@@ -82,7 +82,7 @@ class split_Bregman_TV(optimizer):
     
     
 
-class ista(optimizer):
+class ista_L1(optimizer):
     def __init__(self, A, u, b, t=0.1, lamda=1.0, **kwargs):
         super().__init__(**kwargs)
         self.A = A
@@ -92,14 +92,10 @@ class ista(optimizer):
         self.t = t
     
     def step(self,):
-        #e = np.linalg.norm(A(x)-y)**2 + lamda*np.linalg.norm(x, ord=1)
-
         grad = self.A.adjoint(self.A(self.u) - self.b)
         lin_up = self.u - 2 * self.t * grad
         self.u = soft_shrinkage(lin_up, self.lamda * self.t)
 
-# def ista(y, A, A_adjoint, prox, t, lamda, iter):
-#     x = ski.transform.iradon(y*y.shape[-2])
 
 
 
@@ -147,7 +143,6 @@ class lscg(optimizer):
         self.r = self.r - alpha * Ap
         self.g = self.A.adjoint(self.r)
         self.gg_old = self.gg
-        self.num_it += 1
 
 
 
