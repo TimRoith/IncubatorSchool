@@ -1,6 +1,6 @@
 import numpy as np
 from operators import Grad, soft_shrinkage
-
+import pywt
 
 class optimizer:
     def __init__(self, max_it=10, verbosity=1, energy_fun=None):
@@ -16,7 +16,7 @@ class optimizer:
             self.step()
             self.num_it+=1
             if not self.energy_fun is None:
-                energy = self.energy_fun(self.u)
+                energy = self.energy_fun(self.x)
                 self.cur_energy=energy
                 self.energy_hist.append(energy)
             if self.verbosity > 0:
@@ -24,7 +24,7 @@ class optimizer:
                 print('Energy: ' +str(self.cur_energy))
                 
         # return solution
-        return self.u
+        return self.x
       
     
     def terminate(self):
@@ -33,9 +33,8 @@ class optimizer:
         else:
             return False
 
-
 class split_Bregman_TV(optimizer):
-    def __init__(self, A, rhs, u0, 
+    def __init__(self, A, rhs,x0, 
                  gamma=1.0, lamda=1.0,
                  inner_verbosity = 0,
                  max_inner_it = 10,
@@ -54,8 +53,8 @@ class split_Bregman_TV(optimizer):
                 self.grad = Grad()
             
             
-            def __call__(self, u):
-                return lv([gamma * A(u), 0.5 * self.grad(u)])
+            def __call__(self,x):
+                return lv([gamma * A(x), 0.5 * self.grad(x)])
 
             def adjoint(self, p):
                 return gamma * A.adjoint(p[0]) + 0.5 * self.grad.adjoint(p[1])
@@ -63,47 +62,68 @@ class split_Bregman_TV(optimizer):
         self.cg_op = cg_op()
         self.rhs = rhs
 
-        self.u = u0
-        self.b = self.grad(u0)
-        self.d = soft_shrinkage(self.b + self.grad(self.u), self.lamda * self.gamma)
-        self.inner_verboisty = inner_verbosity
+        self.x = x0
+        self.y = self.grad(x0)
+        self.d = soft_shrinkage(self.y + self.grad(self.x), self.lamda * self.gamma)
+        self.inner_verbosity = inner_verbosity
         self.max_inner_it = max_inner_it
 
     def step(self):
-        inner_rhs = lv([self.gamma * self.rhs, 0.5 * (self.d - self.b)])
-        self.u = self.solve_inner(inner_rhs)
-        self.d = soft_shrinkage(self.b + self.grad(self.u), self.lamda * self.gamma)
-        self.b = self.b + self.grad(self.u) - self.d
+        inner_rhs = lv([self.gamma * self.rhs, 0.5 * (self.d - self.y)])
+        self.x = self.solve_inner(inner_rhs)
+        self.d = soft_shrinkage(self.y + self.grad(self.x), self.lamda * self.gamma)
+        self.y = self.y + self.grad(self.x) - self.d
         
     def solve_inner(self, rhs):
-        return lscg(self.cg_op, rhs, self.u, 
-                    verbosity = self.inner_verboisty, 
+        return lscg(self.cg_op, rhs, self.x, 
+                    verbosity = self.inner_verbosity, 
                     max_it=self.max_inner_it).solve()
     
     
 
 class ista_L1(optimizer):
-    def __init__(self, A, u, b, t=0.1, lamda=1.0, **kwargs):
+    def __init__(self, A, x, y, t=0.1, lamda=1.0, **kwargs):
         super().__init__(**kwargs)
         self.A = A
-        self.u = u
-        self.b = b
+        self.x = x
+        self.y = y
         self.lamda = lamda
         self.t = t
     
     def step(self,):
-        grad = self.A.adjoint(self.A(self.u) - self.b)
-        lin_up = self.u - 2 * self.t * grad
-        self.u = soft_shrinkage(lin_up, self.lamda * self.t)
+        grad = self.A.adjoint(self.A(self.x) - self.y)
+        lin_up = self.x - 2 * self.t * grad
+        self.x = soft_shrinkage(lin_up, self.lamda * self.t)
 
+class ista_wavelets(optimizer):
+    def __init__(self, A, x, y, wave, t=0.1, lamda=1.0, **kwargs):
+        super().__init__(**kwargs)
 
+        def energy_fun(x):
+            coeffs,_ = pywt.coeffs_to_array(pywt.wavedec2(x, wavelet=wave, mode='periodization'))
+            return 0.5* np.linalg.norm(A(x)-y)**2 + lamda* np.linalg.norm(coeffs, ord=1)
+
+        self.A = A
+        self.x = x
+        self.y = y
+        self.lamda = lamda
+        self.t = t
+        self.wave = wave
+        self.energy_fun = energy_fun
+    
+    def step(self,):
+        grad = self.A.adjoint(self.A(self.x) - self.y)
+        lin_up = self.x - 2 * self.t * grad
+        lin_up_coeffs, slices = pywt.coeffs_to_array(pywt.wavedec2(lin_up, wavelet=self.wave, mode='periodization'))
+        x_coeffs = soft_shrinkage(lin_up_coeffs, self.lamda * self.t)
+        self.x = pywt.waverec2(pywt.array_to_coeffs(x_coeffs, slices, output_format='wavedec2'), wavelet=self.wave, mode='periodization')
 
 
 
 
 class lscg(optimizer):
     '''
-    Solve the linear system Ax=b using the conjugate gradient method
+    Solve the linear system Ax=y using the conjugate gradient method
 
     This implements Algorithm 1 from [1], or Algorithm 3 from [2]
 
@@ -115,12 +135,12 @@ class lscg(optimizer):
 
     [2] https://sites.stat.washington.edu/wxs/Stat538-w03/conjugate-gradients.pdf
     '''
-    def __init__(self, A, b, u, **kwargs):
+    def __init__(self, A, y, x, **kwargs):
         super().__init__(**kwargs)
         self.A = A
-        self.b = b
-        self.u = u.copy()
-        self.r = b - A(u)
+        self.y = y
+        self.x = x.copy()
+        self.r = y - A(x)
 
         self.g = self.A.adjoint(self.r)
         self.p = self.g
@@ -139,7 +159,7 @@ class lscg(optimizer):
 
         Ap = self.A(self.p)
         alpha = float(self.gg / Ap.norm()**2)
-        self.u = self.u + alpha * self.p
+        self.x = self.x + alpha * self.p
         self.r = self.r - alpha * Ap
         self.g = self.A.adjoint(self.r)
         self.gg_old = self.gg
@@ -287,13 +307,13 @@ class lv:
     
     
     
-def imgrad(u):
+def imgrad(x):
     """
-    applies a 2D image gradient to the image u of shape (n1,n2)
+    applies a 2D image gradient to the image x of shape (n1,n2)
     
     Parameters
     ----------
-    u : numpy 2D array, shape n1, n2
+    x : numpy 2D array, shape n1, n2
         Image
 
     Returns
@@ -301,10 +321,10 @@ def imgrad(u):
     (px,py) image gradients in x- and y-directions.
 
     """
-    n1 = u.shape[-2]
-    n2 = u.shape[-1]
-    px = np.concatenate((u[1:,:]-u[0:-1,:], np.zeros((1,n2))),axis=0)
-    py = np.concatenate((u[:,1:]-u[:,0:-1], np.zeros((n1,1))),axis=1)
+    n1 = x.shape[-2]
+    n2 = x.shape[-1]
+    px = np.concatenate((x[1:,:]-x[0:-1,:], np.zeros((1,n2))),axis=0)
+    py = np.concatenate((x[:,1:]-x[:,0:-1], np.zeros((n1,1))),axis=1)
     return np.concatenate((px[None,...],py[None,...]), axis=0)
 
 def imdiv(p):
@@ -320,9 +340,9 @@ def imdiv(p):
     -------
         - divergence, n1 x n2 np.array
     """
-    u1 = np.concatenate((-p[0,0:1,:], -(p[0,1:-1,:]-p[0,0:-2,:]), p[0,-2:-1,:]), axis = 0)
-    u2 = np.concatenate((-p[1,:,0:1], -(p[1,:,1:-1]-p[1,:,0:-2]), p[1,:,-2:-1]), axis = 1)
-    return -(u1+u2)
+    x1 = np.concatenate((-p[0,0:1,:], -(p[0,1:-1,:]-p[0,0:-2,:]), p[0,-2:-1,:]), axis = 0)
+    x2 = np.concatenate((-p[1,:,0:1], -(p[1,:,1:-1]-p[1,:,0:-2]), p[1,:,-2:-1]), axis = 1)
+    return -(x1+x2)
     
 
 # class pdhg:
