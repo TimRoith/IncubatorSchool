@@ -34,7 +34,7 @@ class optimizer:
             return False
 
 class split_Bregman_TV(optimizer):
-    def __init__(self, A, rhs,x0, 
+    def __init__(self, A, y,x0, 
                  gamma=1.0, lamda=1.0,
                  inner_verbosity = 0,
                  max_inner_it = 10,
@@ -60,19 +60,20 @@ class split_Bregman_TV(optimizer):
                 return gamma * A.adjoint(p[0]) + 0.5 * self.grad.adjoint(p[1])
             
         self.cg_op = cg_op()
-        self.rhs = rhs
+        self.y = y
 
         self.x = x0
-        self.y = self.grad(x0)
-        self.d = soft_shrinkage(self.y + self.grad(self.x), self.lamda * self.gamma)
+        self.b = 0 * self.grad(x0)
+        self.d = None
         self.inner_verbosity = inner_verbosity
         self.max_inner_it = max_inner_it
 
     def step(self):
-        inner_rhs = lv([self.gamma * self.rhs, 0.5 * (self.d - self.y)])
+        self.d = soft_shrinkage(self.b + self.grad(self.x), self.lamda * self.gamma)
+        self.b = self.b + self.grad(self.x) - self.d
+        inner_rhs = lv([self.gamma * self.y, 0.5 * (self.d - self.b)])
         self.x = self.solve_inner(inner_rhs)
-        self.d = soft_shrinkage(self.y + self.grad(self.x), self.lamda * self.gamma)
-        self.y = self.y + self.grad(self.x) - self.d
+
         
     def solve_inner(self, rhs):
         return lscg(self.cg_op, rhs, self.x, 

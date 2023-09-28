@@ -3,38 +3,13 @@ import torch.nn as nn
 from torch.nn.functional import relu
 import numpy as np
 import skimage as ski
-from skimage.draw import disk
 import matplotlib.pyplot as plt
+from utils import shapes, get_DESY
+
+get_DESY(40)
 
 
-class Square:
-    def __init__(self, img_size=100, num_imgs=1):
-        self.img_size = [img_size, img_size]
-
-    def __call__(self,):
-        S = np.zeros(self.img_size)
-        x_start, y_start = np.random.randint(self.img_size[1]//3,self.img_size[1]//2 , size=(2,))
-        x_end, y_end = np.random.randint(self.img_size[1]//2, 2*self.img_size[1]//3, size=(2,))
-        S[x_start:x_end, y_start:y_end] = 1
-        return S
-    
-class Circle:
-    def __init__(self, img_size=100):
-        self.img_size = [img_size, img_size]
-        
-    def __call__(self,):
-        C = np.zeros(self.img_size)
-        radius = np.random.randint(self.img_size[1]//5, self.img_size[1]//4)
-        row = self.img_size[1]//2 + np.random.randint(-self.img_size[1]//4, self.img_size[1]//4)
-        col = self.img_size[1]//2 + np.random.randint(-self.img_size[1]//4, self.img_size[1]//4)
-        # modern scikit uses a tuple for center
-        rr, cc = disk((row, col), radius)
-        C[rr, cc] = 1.
-        return C
-
-#%%    
-
-
+#%%
 class Recon(nn.Module):
     def __init__(self, img_size=100, thetas=None):
         super(Recon, self).__init__()
@@ -199,7 +174,7 @@ scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_
 #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
 batch_size = 5
 
-train_shape = Circle(img_size=img_size)
+train_shape = shapes(img_size=img_size).circle
 #SQ = Square()
  
 for i in range(1000):
@@ -229,9 +204,9 @@ for i in range(1000):
     
 # %% Test
 img_size=64
-SQ = Square(img_size=img_size)
+SQ = shapes(img_size=img_size).rectangle
 
-C = Circle(img_size=img_size)
+C = shapes(img_size=img_size).circle
 CI = C()
 SQI = SQ()
 
