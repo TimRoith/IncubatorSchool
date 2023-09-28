@@ -20,7 +20,7 @@ class shapes:
         self.DESY = get_DESY(img_size)
         self.p = p
         self.noise_lvl = noise_lvl
-        self.shape_names =['rectangle', 'circle', 'triangle', 'ellipse']
+        self.shape_names = ['rectangle', 'circle', 'triangle', 'ellipse']
         
     def get_shape(self, name='rectangle'):
         if name == 'rectangle':
