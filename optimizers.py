@@ -64,16 +64,17 @@ class split_Bregman_TV(optimizer):
         self.rhs = rhs
 
         self.u = u0
-        self.b = self.grad(u0)
-        self.d = soft_shrinkage(self.b + self.grad(self.u), self.lamda * self.gamma)
+        self.b = 0 * self.grad(u0)
+        self.d = None
         self.inner_verboisty = inner_verbosity
         self.max_inner_it = max_inner_it
 
     def step(self):
-        inner_rhs = lv([self.gamma * self.rhs, 0.5 * (self.d - self.b)])
-        self.u = self.solve_inner(inner_rhs)
         self.d = soft_shrinkage(self.b + self.grad(self.u), self.lamda * self.gamma)
         self.b = self.b + self.grad(self.u) - self.d
+        inner_rhs = lv([self.gamma * self.rhs, 0.5 * (self.d - self.b)])
+        self.u = self.solve_inner(inner_rhs)
+
         
     def solve_inner(self, rhs):
         return lscg(self.cg_op, rhs, self.u, 
