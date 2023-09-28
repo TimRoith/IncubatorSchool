@@ -4,6 +4,16 @@ import skimage as ski
 def soft_shrinkage(x, lamda):
     return np.maximum(np.abs(x)-lamda, 0.) * np.sign(x)
 
+class Identity:
+    def __call__(self,u):
+        return u
+    
+    def adjoint(self, u):
+        return u
+    
+    def inv(self, u):
+        return u
+
 class Radon:
     def __init__(self, theta=None):
         self.theta = theta if not theta is None else np.linspace(0,180, 50)
