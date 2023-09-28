@@ -85,6 +85,10 @@ class split_Bregman_TV(optimizer):
 class ista_L1(optimizer):
     def __init__(self, A, x, y, t=0.1, lamda=1.0, **kwargs):
         super().__init__(**kwargs)
+
+        def energy_fun(x):
+            return 0.5* np.linalg.norm(A(x)-y)**2 + lamda* np.linalg.norm(x, ord=1)
+
         self.A = A
         self.x = x
         self.y = y
@@ -93,7 +97,7 @@ class ista_L1(optimizer):
     
     def step(self,):
         grad = self.A.adjoint(self.A(self.x) - self.y)
-        lin_up = self.x - 2 * self.t * grad
+        lin_up = self.x - self.t * grad
         self.x = soft_shrinkage(lin_up, self.lamda * self.t)
 
 class ista_wavelets(optimizer):
@@ -114,7 +118,7 @@ class ista_wavelets(optimizer):
     
     def step(self,):
         grad = self.A.adjoint(self.A(self.x) - self.y)
-        lin_up = self.x - 2 * self.t * grad
+        lin_up = self.x - self.t * grad
         lin_up_coeffs, slices = pywt.coeffs_to_array(pywt.wavedec2(lin_up, wavelet=self.wave, mode='periodization'))
         x_coeffs = soft_shrinkage(lin_up_coeffs, self.lamda * self.t)
         self.x = pywt.waverec2(pywt.array_to_coeffs(x_coeffs, slices, output_format='wavedec2'), wavelet=self.wave, mode='periodization')
