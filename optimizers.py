@@ -85,6 +85,10 @@ class split_Bregman_TV(optimizer):
 class ista_L1(optimizer):
     def __init__(self, A, x, y, t=0.1, lamda=1.0, **kwargs):
         super().__init__(**kwargs)
+
+        def energy_fun(x):
+            return 0.5* np.linalg.norm(A(x)-y)**2 + lamda* np.linalg.norm(x, ord=1)
+
         self.A = A
         self.x = x
         self.y = y
@@ -93,7 +97,7 @@ class ista_L1(optimizer):
     
     def step(self,):
         grad = self.A.adjoint(self.A(self.x) - self.y)
-        lin_up = self.x - 2 * self.t * grad
+        lin_up = self.x - self.t * grad
         self.x = soft_shrinkage(lin_up, self.lamda * self.t)
 
 class ista_wavelets(optimizer):
@@ -114,7 +118,7 @@ class ista_wavelets(optimizer):
     
     def step(self,):
         grad = self.A.adjoint(self.A(self.x) - self.y)
-        lin_up = self.x - 2 * self.t * grad
+        lin_up = self.x - self.t * grad
         lin_up_coeffs, slices = pywt.coeffs_to_array(pywt.wavedec2(lin_up, wavelet=self.wave, mode='periodization'))
         x_coeffs = soft_shrinkage(lin_up_coeffs, self.lamda * self.t)
         self.x = pywt.waverec2(pywt.array_to_coeffs(x_coeffs, slices, output_format='wavedec2'), wavelet=self.wave, mode='periodization')
@@ -230,81 +234,57 @@ class lv:
 
 
 
-# class total_variation():
-#     """
-#     total variation of 2D image u with shape (n1, n2). Scaled by a constant
-#     regularization parameter scale. Corresponds to the functional 
-#         scale * TV(u)
-#     with u in R^{n1 x n2}
+class proxGD(optimizer):
+    def __init__(self, A, x, y, t=0.1, lamda=1.0, prox=None, **kwargs):
+        super().__init__(**kwargs)
+        self.A = A
+        self.x = x
+        self.y = y
+        self.lamda = lamda
+        self.t = t
+        self.prox = prox if not prox is None else soft_shrinkage
     
-#     __init__ input:
-#         - n1, n2:   shape of u
-#         - scale:    scaling factor, usually a regularization parameter
-        
-#     __call__ input:
-#         - u:        image of shape n1,n2 or n1*n2,
-                    
-#     TV is computed on a grid via finite differences, assuming equidistant 
-#     spacing of the grid. The gradient of this potential does not exist since 
-#     TV is not smooth.
-#     The proximal mapping is approximated using the dual problem. Pass either 
-#     a maximum number of steps, an accuracy (in the primal-dual gap), or both 
-#     to the prox evaluation, for more details see 
-#         total_variation.inexact_prox
-#     """
-#     def __init__(self, n1, n2, scale=1):
-#         self.n1 = n1
-#         self.n2 = n2
-#         self.scale = scale
-        
-#     def _imgrad(self, u):
-#         """
-#         applies a 2D image gradient to the image u of shape (n1,n2)
-        
-#         Parameters
-#         ----------
-#         u : numpy 2D array, shape n1, n2
-#             Image
+    def step(self,):
+        grad = self.A.adjoint(self.A(self.x) - self.y)
+        lin_up = self.x - 2 * self.t * grad
+        self.x = self.prox(lin_up, self.lamda * self.t)
 
-#         Returns
-#         -------
-#         (px,py) image gradients in x- and y-directions.
 
-#         """
-#         px = np.concatenate((u[1:,:]-u[0:-1,:], np.zeros((1,self.n2))),axis=0)
-#         py = np.concatenate((u[:,1:]-u[:,0:-1], np.zeros((self.n1,1))),axis=1)
-#         return np.concatenate((px[np.newaxis,:,:],py[np.newaxis,:,:]), axis=0)
-    
-#     def _imdiv(self, p):
-#         """
-#         Computes the negative divergence of the 2D vector field px,py.
-#         can also be seen as a tensor from R^(n1xn2x2) to R^(n1xn2)
-
-#         Parameters
-#         ----------
-#             - p : 2 x n1 x n2 np.array
-
-#         Returns
-#         -------
-#             - divergence, n1 x n2 np.array
-#         """
-#         u1 = np.concatenate((-p[0,0:1,:], -(p[0,1:-1,:]-p[0,0:-2,:]), p[0,-2:-1,:]), axis = 0)
-#         u2 = np.concatenate((-p[1,:,0:1], -(p[1,:,1:-1]-p[1,:,0:-2]), p[1,:,-2:-1]), axis = 1)
-#         return u1+u2
-    
-#     def __call__(self, u):
-#         """
-#         Computes the TV-seminorm of u
+class admm(optimizer):
+    def __init__(self, A, x, y, rho=0.1, lamda=1.0, prox=None, max_inner_it=5, **kwargs):
+        super().__init__(**kwargs)
+        self.A = A
+        self.x = x
+        self.y = y
+        self.lamda = lamda
+        self.prox = prox if not prox is None else soft_shrinkage
+        self.v = self.prox(self.x ,self.lamda)
+        self.u = 0*self.x
         
-#         Parameters 
-#         ----------
-#         u : numpy array of shape n1, n2
+        self.rho = rho
         
-#         Returns
-#         -------
-#         TV(u) (scalar)
-#         """
-#         return self.scale * np.sum(np.sqrt(np.sum(self._imgrad(u)**2,axis=0)))
+        self.inner_verbosity = 0
+        self.max_inner_it = max_inner_it
+        
+        class cg_op: 
+            def __call__(self,x):
+                return lv([A(x), rho * 0.5 * x])
+
+            def adjoint(self, p):
+                return A.adjoint(p[0]) + rho * 0.5 * p[1]
+
+        self.cg_op = cg_op()
+
+    def step(self):
+        inner_rhs = lv([self.y, self.rho * 0.5 * (self.v - self.u)])
+        self.x = self.solve_inner(inner_rhs)
+        self.v = self.prox(self.x + self.u ,self.lamda)
+        self.u = self.u + self.x -self.v
+
+    def solve_inner(self, rhs):
+        return lscg(self.cg_op, rhs, self.x, 
+                    verbosity = self.inner_verbosity, 
+                    max_it=self.max_inner_it).solve()
     
     
     
@@ -344,52 +324,3 @@ def imdiv(p):
     x1 = np.concatenate((-p[0,0:1,:], -(p[0,1:-1,:]-p[0,0:-2,:]), p[0,-2:-1,:]), axis = 0)
     x2 = np.concatenate((-p[1,:,0:1], -(p[1,:,1:-1]-p[1,:,0:-2]), p[1,:,-2:-1]), axis = 1)
     return -(x1+x2)
-    
-
-# class pdhg:
-#     """solve the problem
-#         f(Kx) + g(x) + h(x)
-#     using PDHG algorithm
-#         x_{k+1} = prox_{tau*g}(x_k - tau*(dh(x_k) + Kt*y_k))
-#         x_r = 2*x_{k+1} - x_k
-#         y_{k+1} = prox_{sigma*fconj}(y_k + sigma*K*x_r)
-#     with differentiable h and possibly non-smooth f and g
-#     """
-#     def __init__(self, x0, y0, K, prox_fconj, 
-#                  tau=0.01, sigma=0.01, 
-#                  n_iter=100, prox_g=None, 
-#                  dh=None, 
-#                  energy_fun=None,
-#                  verbosity=1):
-#         self.iter = 0
-#         self.n_iter = n_iter
-#         self.x = np.copy(x0)
-#         self.y = y0
-        
-#         self.tau = tau
-#         self.sigma = sigma
-#         self.prox_fconj = prox_fconj
-#         self.K = K
-#         self.prox_g = prox_g if not prox_g is None else lambda x, tau:x
-#         self.dh = dh if not dh is None else lambda x:0
-#         self.energy_fun = energy_fun
-#         self.verbosity = verbosity
-#         self.energy_hist = []
-    
-#     def compute(self, verbose=False):
-        
-#         while self.iter < self.n_iter:
-#             self.iter += 1
-#             x_prev = self.x
-#             self.x = self.prox_g(self.x - self.tau*(self.dh(self.x)+self.K.adjoint(self.y)), self.tau)
-#             self.y = self.prox_fconj(self.y + self.sigma*self.K(2*self.x - x_prev), self.sigma)
-
-            
-#             if not self.energy_fun is None:
-                
-#                 energy = self.energy_fun(self.K, self.x)
-#                 if self.verbosity > 0:
-#                     print('Iteration ' + str(self.iter) +', energy: ' +str(energy)) 
-
-#                 self.energy_hist.append(energy)
-#         return self.x

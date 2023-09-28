@@ -20,8 +20,9 @@ class shapes:
         self.DESY = get_DESY(img_size)
         self.p = p
         self.noise_lvl = noise_lvl
+        self.shape_names = ['rectangle', 'circle', 'triangle', 'ellipse']
         
-    def get_shape(self, name='rectangel'):
+    def get_shape(self, name='rectangle'):
         if name == 'rectangle':
             I =  self.rectangle()
         elif name == 'circle':
@@ -30,6 +31,10 @@ class shapes:
             I = self.triangle()
         elif name == 'ellipse':
             I = self.ellipse()
+        elif name == 'random':
+            i = np.random.randint(0, len(self.shape_names)-1)
+            shape_name = self.shape_names[i]
+            I = self.get_shape(name=shape_name)
         else:
             raise RuntimeError('Unknwon shape: ' + str(name))
             
